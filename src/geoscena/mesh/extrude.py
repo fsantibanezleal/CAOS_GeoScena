@@ -48,6 +48,8 @@ def extrude_buildings(
     height_source: np.ndarray,
     base_elev: np.ndarray | None = None,
     classes: np.ndarray | None = None,
+    modalities: dict[str, np.ndarray] | None = None,
+    name: str = "buildings",
 ) -> MeshLayer:
     """Extrude all footprints into one merged MeshLayer.
 
@@ -57,6 +59,9 @@ def extrude_buildings(
         height_source: per-building provenance tag.
         base_elev: per-building ground elevation in metres (0 if None).
         classes: optional per-building land-cover class code.
+        modalities: optional {attr_name: per-building value array} fused topic attributes
+            (solar, soil, ...) sampled at the footprint centroid; attached to each feature.
+        name: layer name (use "buildings_lite" for a reduced-detail LoD proxy).
     """
     tr = aoi.transformer_to_local()
     hmax = float(np.nanpercentile(heights, 95)) if len(heights) else 1.0
@@ -130,26 +135,28 @@ def extrude_buildings(
             voff += verts.shape[0]
 
         floors = _attr(c_floors, i)
-        features.append(
-            {
-                "id": int(i),
-                "height_m": round(h, 2),
-                "height_source": str(height_source[i]),
-                "class": int(classes[i]) if classes is not None else None,  # WorldCover land cover
-                "area_m2": round(area_m2, 1),
-                "num_floors": int(floors) if floors is not None else None,
-                "min_height_m": (round(float(_attr(c_minh, i)), 1) if _attr(c_minh, i) is not None else None),
-                "use": _str_or_none(_attr(c_bclass, i)),  # Overture building class (residential, commercial, ...)
-                "subtype": _str_or_none(_attr(c_subtype, i)),
-                "roof_shape": _str_or_none(_attr(c_roof, i)),
-            }
-        )
+        feat = {
+            "id": int(i),
+            "height_m": round(h, 2),
+            "height_source": str(height_source[i]),
+            "class": int(classes[i]) if classes is not None else None,  # WorldCover land cover
+            "area_m2": round(area_m2, 1),
+            "num_floors": int(floors) if floors is not None else None,
+            "min_height_m": (round(float(_attr(c_minh, i)), 1) if _attr(c_minh, i) is not None else None),
+            "use": _str_or_none(_attr(c_bclass, i)),  # Overture building class (residential, commercial, ...)
+            "subtype": _str_or_none(_attr(c_subtype, i)),
+            "roof_shape": _str_or_none(_attr(c_roof, i)),
+        }
+        for mkey, marr in (modalities or {}).items():
+            v = marr[i] if marr is not None and i < len(marr) else None
+            feat[mkey] = (round(float(v), 2) if v is not None and np.isfinite(v) else None)
+        features.append(feat)
 
     if not all_v:
-        return MeshLayer("buildings", np.zeros((0, 3), "float32"), np.zeros((0, 3), "int64"))
+        return MeshLayer(name, np.zeros((0, 3), "float32"), np.zeros((0, 3), "int64"))
 
     return MeshLayer(
-        name="buildings",
+        name=name,
         vertices=np.vstack(all_v),
         faces=np.vstack(all_f),
         colors=np.vstack(all_c),

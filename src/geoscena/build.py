@@ -22,6 +22,12 @@ from geoscena.mesh.extrude import extrude_buildings
 from geoscena.mesh.roads import road_ribbons
 from geoscena.mesh.terrain import terrain_mesh
 
+# LoD proxy: places with more than LITE_THRESHOLD buildings also get a "buildings_lite" layer holding the
+# LITE_K most significant (tallest x largest) footprints, so the viewer shows the city fast then swaps in
+# the full layer. Keep LITE_K well under LITE_THRESHOLD so the proxy is genuinely light.
+LITE_THRESHOLD = 60000
+LITE_K = 22000
+
 
 @dataclass
 class BuildConfig:
@@ -104,6 +110,25 @@ def build_scene(aoi: AOI, cfg: BuildConfig) -> SceneBundle:
                     aoi, gdf, hres.heights, hres.source, base_elev=base, classes=classes
                 )
                 bundle.add_mesh(mesh, gdf.attrs["provenance"])
+                # LoD proxy: for large scenes (e.g. full Santiago, ~179k buildings) the full buildings
+                # layer is tens of MB and slow to stream. Bake a "lite" subset of the visually significant
+                # buildings (tallest x largest) so the viewer can show the city in ~1 s, then swap in the
+                # full layer in the background. Small places skip this (they already load fast).
+                if len(gdf) > LITE_THRESHOLD:
+                    area_deg = np.asarray(gdf.geometry.area, dtype="float64")
+                    signif = hres.heights * np.sqrt(np.maximum(area_deg, 0.0))
+                    keep = np.sort(np.argsort(signif)[::-1][:LITE_K])
+                    lite = extrude_buildings(
+                        aoi,
+                        gdf.iloc[keep],
+                        hres.heights[keep],
+                        hres.source[keep],
+                        base_elev=(base[keep] if base is not None else None),
+                        classes=(classes[keep] if classes is not None else None),
+                        name="buildings_lite",
+                    )
+                    bundle.add_mesh(lite, gdf.attrs["provenance"])
+                    notes.append(f"lite LoD proxy: {len(keep)}/{len(gdf)} buildings")
             else:
                 notes.append("no buildings in AOI")
         except Exception as exc:  # noqa: BLE001
