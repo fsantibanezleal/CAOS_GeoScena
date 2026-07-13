@@ -32,6 +32,7 @@ class BuildConfig:
     include_roads: bool = True
     include_context: bool = True
     include_population: bool = True
+    include_ground_truth: bool = True
     overture_release: str | None = None
     notes: list[str] = field(default_factory=list)
 
@@ -40,6 +41,7 @@ def build_scene(aoi: AOI, cfg: BuildConfig) -> SceneBundle:
     """Fetch every available layer for the AOI and assemble a SceneBundle."""
     bundle = SceneBundle(aoi=aoi)
     notes: list[str] = list(cfg.notes)
+    ground_truth: dict | None = None
 
     # --- terrain (always) ---
     dem = dem_mod.fetch_dem(aoi, fetched=cfg.fetched)
@@ -85,6 +87,19 @@ def build_scene(aoi: AOI, cfg: BuildConfig) -> SceneBundle:
                     notes.append(f"2.5D raster skipped: {exc}")
                 hres = assign_heights(gdf, raster_heights=raster_h)
                 height_mix = hres.mix
+                # benchmark the fused heights against an authoritative LoD2 model where one exists.
+                if cfg.include_ground_truth:
+                    try:
+                        from geoscena.fetch.citymodel import compare_heights, fetch_3dbag
+
+                        gt = fetch_3dbag(aoi, fetched=cfg.fetched)
+                        if gt is not None:
+                            ground_truth = compare_heights(
+                                cent.x.to_numpy(), cent.y.to_numpy(), hres.heights, gt, aoi
+                            )
+                            notes.append(f"ground-truth vs {gt.provenance.source}")
+                    except Exception as exc:  # noqa: BLE001
+                        notes.append(f"ground-truth skipped: {exc}")
                 mesh = extrude_buildings(
                     aoi, gdf, hres.heights, hres.source, base_elev=base, classes=classes
                 )
@@ -155,6 +170,7 @@ def build_scene(aoi: AOI, cfg: BuildConfig) -> SceneBundle:
             name: (bundle.meshes.get(name) or bundle.points[name]).stats()
             for name in bundle.layer_names()
         },
+        "ground_truth": ground_truth,
         "notes": notes,
     }
     return bundle
