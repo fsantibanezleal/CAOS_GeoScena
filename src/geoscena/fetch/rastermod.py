@@ -98,7 +98,7 @@ def fetch_raster_modality(
 
     Raises on access failure so the caller can record the gap and skip the layer (terrain-first policy).
     """
-    w, s, e, n = aoi.bbox()
+    w, s, e, n = aoi.bbox
     aspect = (e - w) / max(n - s, 1e-9)
     if aspect >= 1:
         width = max_cells
@@ -108,16 +108,25 @@ def fetch_raster_modality(
         width = max(1, int(round(max_cells * aspect)))
 
     src_url = _resolve_url(spec.url, cache_dir)
-    with rasterio.open(src_url) as ds:
-        with WarpedVRT(ds, crs="EPSG:4326", resampling=spec.resampling) as vrt:
+    env = rasterio.Env(
+        GDAL_HTTP_TIMEOUT="30",
+        GDAL_HTTP_MAX_RETRY="2",
+        GDAL_HTTP_RETRY_DELAY="2",
+        VSI_CACHE="TRUE",
+        GDAL_DISABLE_READDIR_ON_OPEN="EMPTY_DIR",
+        CPL_VSIL_CURL_ALLOWED_EXTENSIONS=".vrt,.tif,.tiff",
+    )
+    with env, rasterio.open(src_url) as ds:
+        with WarpedVRT(
+            ds, crs="EPSG:4326", resampling=spec.resampling,
+            src_nodata=spec.src_nodata, nodata=spec.src_nodata,
+        ) as vrt:
             win = from_bounds(w, s, e, n, transform=vrt.transform)
             raw = vrt.read(
                 spec.band,
                 window=win,
                 out_shape=(height, width),
                 resampling=spec.resampling,
-                boundless=True,
-                fill_value=(spec.src_nodata if spec.src_nodata is not None else 0),
             ).astype("float32")
             src_nodata = spec.src_nodata if spec.src_nodata is not None else ds.nodata
 
@@ -130,10 +139,7 @@ def fetch_raster_modality(
     prov = LayerProvenance(
         source=spec.source,
         url=spec.url,
-        license=spec.license,
-        license_name=spec.license,
-        license_url=spec.license_url,
-        commercial_ok=spec.commercial_ok,
+        license=spec.license,  # a key into geoscena.provenance.LICENSES; name/url/commercial derived
         fetched=fetched,
         method=spec.method,
         extra={"modality": spec.key, "unit": spec.unit, **spec.extra},

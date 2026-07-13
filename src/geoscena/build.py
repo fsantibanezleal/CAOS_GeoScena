@@ -39,6 +39,8 @@ class BuildConfig:
     include_context: bool = True
     include_population: bool = True
     include_ground_truth: bool = True
+    include_modalities: bool = True  # fused topic modalities (solar, soil, ...) as per-building attributes
+    cache_dir: str | None = None  # local cache for download-based modalities (solar); COG modalities ignore it
     overture_release: str | None = None
     notes: list[str] = field(default_factory=list)
 
@@ -106,8 +108,28 @@ def build_scene(aoi: AOI, cfg: BuildConfig) -> SceneBundle:
                             notes.append(f"ground-truth vs {gt.provenance.source}")
                     except Exception as exc:  # noqa: BLE001
                         notes.append(f"ground-truth skipped: {exc}")
+                # --- fused topic modalities (solar, soil, ...) sampled per building centroid ---
+                modalities: dict[str, np.ndarray] = {}
+                if cfg.include_modalities:
+                    from geoscena.fetch.rastermod import MODALITIES, fetch_raster_modality
+
+                    for spec in MODALITIES.values():
+                        try:
+                            rm = fetch_raster_modality(
+                                aoi, spec, fetched=cfg.fetched, cache_dir=cfg.cache_dir
+                            )
+                            vals = rm.sample(cent.x.to_numpy(), cent.y.to_numpy())
+                            if np.isfinite(vals).any():
+                                modalities[spec.key] = vals
+                                bundle.add_modality(spec.key, spec.label, spec.unit, rm.provenance)
+                                notes.append(
+                                    f"modality {spec.key}: {int(np.isfinite(vals).sum())}/{len(vals)} sampled"
+                                )
+                        except Exception as exc:  # noqa: BLE001 - a modality gap never sinks the build
+                            notes.append(f"modality {spec.key} skipped: {type(exc).__name__}")
                 mesh = extrude_buildings(
-                    aoi, gdf, hres.heights, hres.source, base_elev=base, classes=classes
+                    aoi, gdf, hres.heights, hres.source,
+                    base_elev=base, classes=classes, modalities=modalities,
                 )
                 bundle.add_mesh(mesh, gdf.attrs["provenance"])
                 # LoD proxy: for large scenes (e.g. full Santiago, ~179k buildings) the full buildings
@@ -125,6 +147,7 @@ def build_scene(aoi: AOI, cfg: BuildConfig) -> SceneBundle:
                         hres.source[keep],
                         base_elev=(base[keep] if base is not None else None),
                         classes=(classes[keep] if classes is not None else None),
+                        modalities={k: v[keep] for k, v in modalities.items()},
                         name="buildings_lite",
                     )
                     bundle.add_mesh(lite, gdf.attrs["provenance"])

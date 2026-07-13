@@ -75,6 +75,9 @@ class SceneBundle:
     points: dict[str, PointLayer] = field(default_factory=dict)
     provenance: dict[str, LayerProvenance] = field(default_factory=dict)
     stats: dict = field(default_factory=dict)
+    # Fused topic modalities (solar, soil, ...) sampled as per-building attributes rather than their own
+    # layer; recorded here so the manifest still carries each one's source + license (honesty).
+    modalities: list[dict] = field(default_factory=list)
 
     def add_mesh(self, layer: MeshLayer, prov: LayerProvenance) -> None:
         self.meshes[layer.name] = layer
@@ -83,6 +86,11 @@ class SceneBundle:
     def add_points(self, layer: PointLayer, prov: LayerProvenance) -> None:
         self.points[layer.name] = layer
         self.provenance[layer.name] = prov
+
+    def add_modality(self, key: str, label: str, unit: str, prov: LayerProvenance) -> None:
+        rec = prov.as_dict()
+        rec.update({"key": key, "label": label, "unit": unit})
+        self.modalities.append(rec)
 
     def layer_names(self) -> list[str]:
         return list(self.meshes) + list(self.points)
@@ -113,12 +121,15 @@ class SceneBundle:
             "aoi": self.aoi.as_dict(),
             "layers": layers,
             "stats": self.stats,
-            "any_noncommercial": self.any_noncommercial(),
+            "modalities": self.modalities,
+            "any_noncommercial": self.any_noncommercial()
+            or any(m.get("commercial_ok") is False for m in self.modalities),
             "credits": sorted(
                 {
                     f"{p.source} ({p.license_record().get('name', p.license)})"
                     for p in self.provenance.values()
                 }
+                | {f"{m['source']} ({m.get('license_name', m['license'])})" for m in self.modalities}
             ),
         }
 
