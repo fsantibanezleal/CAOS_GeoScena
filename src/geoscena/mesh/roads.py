@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import numpy as np
 from mapbox_earcut import triangulate_float64
-from shapely.geometry import LineString, MultiLineString
+from shapely.geometry import LineString, MultiLineString, MultiPolygon, Polygon
 
 from geoscena.aoi import AOI
 from geoscena.bundle import MeshLayer
@@ -67,28 +67,36 @@ def road_ribbons(
             xs, ys = tr.transform(*line.xy)
             local = LineString(np.column_stack([xs, ys]))
             ribbon = local.buffer(hw, cap_style=2, join_style=1)
-            if ribbon.is_empty or ribbon.exterior is None:
+            if ribbon.is_empty:
                 continue
-            ext = np.asarray(ribbon.exterior.coords)[:-1]
-            if ext.shape[0] < 3:
-                continue
-            rings = np.array([ext.shape[0]], dtype="uint32")
-            tri = triangulate_float64(ext.astype("float64"), rings).reshape(-1, 3)
-            if tri.shape[0] == 0:
-                continue
-            # elevation at ribbon vertices
-            if dem is not None:
-                # back-project local metres to lon/lat for sampling
-                inv = aoi.transformer_to_local()
-                lon, lat = inv.transform(ext[:, 0], ext[:, 1], direction="INVERSE")
-                z = dem.sample(lon, lat)
-                z = np.where(np.isfinite(z), z, np.nanmean(z) if np.isfinite(z).any() else 0.0)
-            else:
-                z = np.zeros(ext.shape[0])
-            verts = np.column_stack([ext, z + z_offset_m]).astype("float32")
-            all_v.append(verts)
-            all_f.append(tri.astype("int64") + voff)
-            voff += verts.shape[0]
+            # buffer() may yield a Polygon or a MultiPolygon; handle both.
+            polys = (
+                [ribbon]
+                if isinstance(ribbon, Polygon)
+                else list(ribbon.geoms)
+                if isinstance(ribbon, MultiPolygon)
+                else []
+            )
+            for poly in polys:
+                if poly.exterior is None:
+                    continue
+                ext = np.asarray(poly.exterior.coords)[:-1]
+                if ext.shape[0] < 3:
+                    continue
+                rings = np.array([ext.shape[0]], dtype="uint32")
+                tri = triangulate_float64(ext.astype("float64"), rings).reshape(-1, 3)
+                if tri.shape[0] == 0:
+                    continue
+                if dem is not None:
+                    lon, lat = tr.transform(ext[:, 0], ext[:, 1], direction="INVERSE")
+                    z = dem.sample(lon, lat)
+                    z = np.where(np.isfinite(z), z, np.nanmean(z) if np.isfinite(z).any() else 0.0)
+                else:
+                    z = np.zeros(ext.shape[0])
+                verts = np.column_stack([ext, z + z_offset_m]).astype("float32")
+                all_v.append(verts)
+                all_f.append(tri.astype("int64") + voff)
+                voff += verts.shape[0]
 
     if not all_v:
         return MeshLayer(

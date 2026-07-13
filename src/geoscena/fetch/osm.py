@@ -29,6 +29,11 @@ def _osmnx():
         raise ImportError(
             "OSM context fetch needs OSMnx. Install:  pip install 'geoscena[osm]'"
         ) from exc
+    # Fail fast: the Overpass mirror can queue/stall, which would sink a batch bake. Cap both the
+    # HTTP request and the Overpass query so a slow layer is skipped (build.py catches) not hung on.
+    ox.settings.requests_timeout = 40
+    ox.settings.timeout = 40
+    ox.settings.overpass_rate_limit = False
     return ox
 
 
