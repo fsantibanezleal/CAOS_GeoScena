@@ -18,7 +18,12 @@ Given an AOI (a centre + half-size, or a bbox), geoscena:
    - **Terrain** from Copernicus GLO-30 DSM (AWS Open Data, keyless COG windowed reads).
    - **Land cover** from ESA WorldCover 10 m (AWS Open Data).
    - **Water / green / rail** context from OpenStreetMap (OSMnx / Overpass).
-   - (extendable: Google Open Buildings 2.5D height rasters, GHS-POP, USGS 3DEP lidar.)
+   - **Population density** from GHS-POP (windowed COG).
+   - **2.5D building heights** from Google Open Buildings Temporal (S2-tiled UTM rasters), the
+     Global-South rung of the height ladder.
+   - **LoD2 ground truth** from 3DBAG (OGC API, EPSG:28992), used as a benchmark and a renderable layer.
+   - (extendable: USGS 3DEP lidar; additional topic modalities via national IDEs, e.g. CC-BY
+     geoportal.cl land use / vegetation / solar / climate for Chile.)
 2. **Fuses** them: the **height-provenance ladder** assigns every building a height from the
    best available source (measured -> floors x floor-height -> height raster -> prior) and
    records *which* source was used per building, so inference is reported, never hidden.
