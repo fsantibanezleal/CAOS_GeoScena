@@ -3,7 +3,7 @@
 Two subcommands:
 
     geoscena build --name "Berlin Mitte" --lon 13.405 --lat 52.517 --half 1200 \
-        --fetched 2026-07-12 --out E:/_Datos/maqueta/bundles/berlin_mitte
+        --fetched 2026-07-12 --out out/berlin_mitte
 
     geoscena info    # print the known sources + licenses
 
