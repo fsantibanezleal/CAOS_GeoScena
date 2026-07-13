@@ -45,6 +45,10 @@ def write_mesh_glb(mesh: MeshLayer, path: str | Path) -> Path:
         rgba[:, :3] = mesh.colors
         rgba[:, 3] = 255
         tm.visual = trimesh.visual.ColorVisuals(mesh=tm, vertex_colors=rgba)
+    # Per-vertex feature id as a glTF custom vertex attribute (_featureid) so the viewer can
+    # resolve a picked triangle back to its building. process=False preserves vertex order.
+    if mesh.feature_ids is not None:
+        tm.vertex_attributes["featureid"] = np.asarray(mesh.feature_ids, dtype="float32")
     scene = trimesh.Scene()
     node_extras = {"layer": mesh.name}
     if mesh.features:
