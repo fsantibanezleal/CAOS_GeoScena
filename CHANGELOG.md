@@ -4,6 +4,23 @@ All notable changes to `geoscena` are documented here. Format: [Keep a Changelog
 versions use `X.XX.XXX` (display) / dropped-zero semver in the manifest. `0.x` while the SceneBundle
 contract is unstable.
 
+## [0.03.000] - 2026-07-13
+
+### Added
+- **Open Buildings 2.5D Temporal height-raster fetcher** (`fetch.openbuildings`): fills rung 3 of the
+  height-provenance ladder for the Global South. Locates the covering GCS tile via the level-2 S2 cell
+  manifest + the AOI's UTM EPSG, windowed-reads band 2 (building_height) over `/vsicurl`, reprojects to
+  a WGS84 grid, samples per building. Regions outside coverage return None (skipped). Verified on
+  Santiago: 94% default-prior heights become 93% real satellite-derived heights.
+- Wired the raster into `build_scene`'s height ladder (rung 3) automatically.
+
+## [0.02.000] - 2026-07-13
+
+### Added
+- **GHS-POP population fetcher** (`fetch.ghsl`): windowed COG read of the JRC GHS-POP 100 m residential
+  population grid (OpenLandMap mirror, CC-BY-4.0), plus `mesh.population` (extruded, density-coloured
+  cell layer). Wired into `build_scene` as an optional `population` layer.
+
 ## [0.01.000] - 2026-07-12
 
 ### Added
