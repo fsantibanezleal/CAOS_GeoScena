@@ -36,9 +36,17 @@ def _download(aoi: AOI, otype: str, release: str) -> gpd.GeoDataFrame:
     w, s, e, n = aoi.bbox
     cache = aoi_key(aoi, f"overture_{otype}_{release.replace('.', '_')}", "parquet")
     if cache.exists() and cache.stat().st_size > 0:
-        gdf = gpd.read_parquet(cache)
-        return gdf.to_crs("EPSG:4326") if gdf.crs else gdf.set_crs("EPSG:4326")
+        try:
+            gdf = gpd.read_parquet(cache)
+            return gdf.to_crs("EPSG:4326") if gdf.crs else gdf.set_crs("EPSG:4326")
+        except Exception:
+            # A prior run was interrupted mid-write, leaving a corrupt parquet: drop and re-fetch.
+            cache.unlink(missing_ok=True)
 
+    # Download to a temp path, then atomically move into the cache so an interrupted download
+    # never leaves a corrupt cache file behind.
+    tmp = cache.with_suffix(".parquet.tmp")
+    tmp.unlink(missing_ok=True)
     cmd = [
         sys.executable,
         "-m",
@@ -49,15 +57,17 @@ def _download(aoi: AOI, otype: str, release: str) -> gpd.GeoDataFrame:
         "geoparquet",
         f"--type={otype}",
         "-o",
-        str(cache),
+        str(tmp),
     ]
     env = {"OVERTURE_RELEASE": release}
     proc = subprocess.run(cmd, capture_output=True, text=True, env={**_os_environ(), **env})
-    if proc.returncode != 0 or not cache.exists():
+    if proc.returncode != 0 or not tmp.exists():
+        tmp.unlink(missing_ok=True)
         raise RuntimeError(
             f"overturemaps download ({otype}) failed: {proc.stderr.strip()[:400]}"
         )
-    Path(str(cache) + ".state").unlink(missing_ok=True)
+    Path(str(tmp) + ".state").unlink(missing_ok=True)
+    tmp.replace(cache)
     gdf = gpd.read_parquet(cache)
     if gdf.crs is None:
         gdf.set_crs("EPSG:4326", inplace=True)
