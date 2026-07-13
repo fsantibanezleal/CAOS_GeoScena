@@ -29,6 +29,7 @@ dependencies = [
   "requests>=2.31",
   "trimesh>=4.4",
   "mapbox-earcut>=1.0",
+  "s2sphere>=0.2.5",
 ]
 
 [project.optional-dependencies]

@@ -72,7 +72,18 @@ def build_scene(aoi: AOI, cfg: BuildConfig) -> SceneBundle:
                     if landcover is not None
                     else None
                 )
-                hres = assign_heights(gdf)
+                # rung 3 of the ladder: Open Buildings 2.5D height raster (Global South only).
+                raster_h = None
+                try:
+                    from geoscena.fetch.openbuildings import fetch_height_raster
+
+                    hr = fetch_height_raster(aoi, fetched=cfg.fetched)
+                    if hr is not None:
+                        raster_h = hr.sample(cent.x.to_numpy(), cent.y.to_numpy())
+                        notes.append(f"open-buildings 2.5D raster used ({hr.provenance.extra.get('epsg')})")
+                except Exception as exc:  # noqa: BLE001
+                    notes.append(f"2.5D raster skipped: {exc}")
+                hres = assign_heights(gdf, raster_heights=raster_h)
                 height_mix = hres.mix
                 mesh = extrude_buildings(
                     aoi, gdf, hres.heights, hres.source, base_elev=base, classes=classes
