@@ -31,6 +31,7 @@ class BuildConfig:
     include_buildings: bool = True
     include_roads: bool = True
     include_context: bool = True
+    include_population: bool = True
     overture_release: str | None = None
     notes: list[str] = field(default_factory=list)
 
@@ -118,6 +119,23 @@ def build_scene(aoi: AOI, cfg: BuildConfig) -> SceneBundle:
                     bundle.add_mesh(mesh, gdf.attrs["provenance"])
         except ImportError as exc:
             notes.append(f"OSM context unavailable: {exc}")
+
+    # --- population (GHS-POP) ---
+    if cfg.include_population:
+        try:
+            from geoscena.fetch.ghsl import fetch_population
+            from geoscena.mesh.population import population_mesh
+
+            pop = fetch_population(aoi, fetched=cfg.fetched)
+            if pop.total() > 0:
+                mesh = population_mesh(aoi, pop, dem=dem)
+                if mesh.faces.shape[0]:
+                    bundle.add_mesh(mesh, pop.provenance)
+                    notes.append(f"population total ~{int(pop.total())}")
+            else:
+                notes.append("no population in AOI")
+        except Exception as exc:  # noqa: BLE001
+            notes.append(f"population skipped: {exc}")
 
     bundle.stats = {
         "layers": bundle.layer_names(),
