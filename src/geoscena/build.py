@@ -157,6 +157,25 @@ def build_scene(aoi: AOI, cfg: BuildConfig) -> SceneBundle:
         except Exception as exc:  # noqa: BLE001
             notes.append(f"buildings skipped: {exc}")
 
+    # --- LoD2 ground-truth LAYER (authoritative 3DBAG buildings rendered alongside the fusion; NL tier-A) ---
+    if cfg.include_ground_truth:
+        try:
+            from geoscena.fetch.citymodel import fetch_3dbag_buildings
+
+            lod2 = fetch_3dbag_buildings(aoi, fetched=cfg.fetched, max_pages=3)
+            if lod2 is not None and len(lod2):
+                cent2 = lod2.geometry.representative_point()
+                base2 = dem.sample(cent2.x.to_numpy(), cent2.y.to_numpy())
+                base2 = np.where(np.isfinite(base2), base2, float(np.nanmin(dem.z)))
+                hsrc2 = np.array(["measured"] * len(lod2))
+                lod2_mesh = extrude_buildings(
+                    aoi, lod2, lod2["height"].to_numpy(), hsrc2, base_elev=base2, name="lod2"
+                )
+                bundle.add_mesh(lod2_mesh, lod2.attrs["provenance"])
+                notes.append(f"lod2 ground-truth layer: {len(lod2)} authoritative 3DBAG buildings")
+        except Exception as exc:  # noqa: BLE001 - a missing ground-truth layer never sinks the build
+            notes.append(f"lod2 layer skipped: {exc}")
+
     # --- roads ---
     if cfg.include_roads:
         try:

@@ -31,9 +31,10 @@ class GroundTruth:
     provenance: LayerProvenance
 
 
-def _feature_centroid_height(feat: dict) -> tuple[float, float, float] | None:
-    """Return (rd_x, rd_y, height_m) for a 3DBAG CityJSONFeature, or None."""
-    transform = feat.get("transform")
+def _feature_centroid_height(feat: dict, transform: dict | None = None) -> tuple[float, float, float] | None:
+    """Return (rd_x, rd_y, height_m) for a 3DBAG CityJSONFeature, or None. The vertex transform is
+    document-level in the 3DBAG OGC API, so it is passed in (not read off the feature)."""
+    transform = transform or feat.get("transform")
     verts = feat.get("vertices")
     cos = feat.get("CityObjects", {})
     if not transform or not verts or not cos:
@@ -75,8 +76,9 @@ def fetch_3dbag(aoi: AOI, fetched: str, max_pages: int = 8) -> GroundTruth | Non
         feats = doc.get("features", [])
         if not feats:
             break
+        doc_transform = doc.get("metadata", {}).get("transform")
         for f in feats:
-            ch = _feature_centroid_height(f)
+            ch = _feature_centroid_height(f, doc_transform)
             if ch is None or not (0 < ch[2] < 400):
                 continue
             lon_i, lat_i = inv.transform(ch[0], ch[1])
@@ -99,6 +101,98 @@ def fetch_3dbag(aoi: AOI, fetched: str, max_pages: int = 8) -> GroundTruth | Non
         extra={"n_buildings": len(h_l)},
     )
     return GroundTruth(np.asarray(lon_l), np.asarray(lat_l), np.asarray(h_l), prov)
+
+
+def _feature_footprints(feat: dict, transform: dict | None = None):
+    """Return (shapely geometry in RD/EPSG:28992, height_m) for a 3DBAG CityJSONFeature, or None.
+
+    Uses the LoD 0 MultiSurface (the authoritative 2D footprint) so the building can be rendered as its
+    own layer, not just a benchmark point. Height = b3_h_dak_50p - b3_h_maaiveld. The vertex ``transform``
+    (scale/translate) is document-level in the 3DBAG OGC API, so it is passed in, not read off the feature.
+    """
+    from shapely.geometry import Polygon
+    from shapely.ops import unary_union
+
+    transform = transform or feat.get("transform")
+    verts = feat.get("vertices")
+    cos = feat.get("CityObjects", {})
+    if not transform or not verts or not cos:
+        return None
+    sx, sy, _ = transform["scale"]
+    tx, ty, _ = transform["translate"]
+    v = np.asarray(verts, dtype="float64")
+    X = v[:, 0] * sx + tx
+    Y = v[:, 1] * sy + ty
+    for o in cos.values():
+        a = o.get("attributes", {})
+        dak, grd = a.get("b3_h_dak_50p"), a.get("b3_h_maaiveld")
+        if dak is None or grd is None:
+            continue
+        h = float(dak) - float(grd)
+        for g in o.get("geometry", []):
+            if str(g.get("lod")) != "0":
+                continue
+            polys = []
+            for surface in g.get("boundaries", []):
+                if not surface:
+                    continue
+                try:
+                    outer = [(X[i], Y[i]) for i in surface[0]]
+                    holes = [[(X[i], Y[i]) for i in r] for r in surface[1:]]
+                    p = Polygon(outer, holes)
+                    if p.is_valid and p.area > 0:
+                        polys.append(p)
+                except (IndexError, ValueError):
+                    continue
+            if polys:
+                return (unary_union(polys) if len(polys) > 1 else polys[0], h)
+    return None
+
+
+def fetch_3dbag_buildings(aoi: AOI, fetched: str, max_pages: int = 8):
+    """Authoritative LoD2 buildings over the AOI as a GeoDataFrame (WGS84 footprints + height), for a
+    renderable ``lod2`` ground-truth LAYER. None if outside NL. Mirrors ``fetch_3dbag`` pagination."""
+    import geopandas as gpd
+
+    tr = Transformer.from_crs("EPSG:4326", "EPSG:28992", always_xy=True)
+    w, s, e, n = aoi.bbox
+    xs, ys = tr.transform([w, e, w, e], [s, s, n, n])
+    bbox = f"{min(xs)},{min(ys)},{max(xs)},{max(ys)}"
+
+    geoms, heights = [], []
+    url = f"{API}?bbox={bbox}&limit=1000"
+    for _ in range(max_pages):
+        try:
+            doc = json.loads(urllib.request.urlopen(url, timeout=40).read())
+        except Exception:
+            break
+        feats = doc.get("features", [])
+        if not feats:
+            break
+        doc_transform = doc.get("metadata", {}).get("transform")
+        for f in feats:
+            fh = _feature_footprints(f, doc_transform)
+            if fh is None or not (0 < fh[1] < 400):
+                continue
+            geoms.append(fh[0])
+            heights.append(round(fh[1], 2))
+        nxt = [ln["href"] for ln in doc.get("links", []) if ln.get("rel") == "next"]
+        if not nxt:
+            break
+        url = nxt[0]
+
+    if not geoms:
+        return None
+    gdf = gpd.GeoDataFrame({"height": heights}, geometry=geoms, crs="EPSG:28992").to_crs("EPSG:4326")
+    gdf.attrs["provenance"] = LayerProvenance(
+        source="3D BAG LoD2 (TU Delft)",
+        url="https://api.3dbag.nl/collections/pand",
+        license="CC-BY-4.0",
+        fetched=fetched,
+        method="OGC API items; LoD0 footprint extruded by (b3_h_dak_50p - b3_h_maaiveld); authoritative ground truth",
+        extra={"n_buildings": len(heights)},
+    )
+    return gdf
 
 
 def compare_heights(
