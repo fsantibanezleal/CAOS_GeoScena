@@ -15,12 +15,12 @@ from __future__ import annotations
 
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 
 import geopandas as gpd
 
 from geoscena.aoi import AOI
+from geoscena.cache import aoi_key
 from geoscena.provenance import LayerProvenance
 
 # Overture release. Bump to the latest release folder as they publish (monthly).
@@ -28,11 +28,17 @@ DEFAULT_RELEASE = "2026-06-17.0"
 
 
 def _download(aoi: AOI, otype: str, release: str) -> gpd.GeoDataFrame:
-    """Run the overturemaps extractor for one type over the AOI bbox; read the GeoParquet."""
+    """Run the overturemaps extractor for one type over the AOI bbox; read the GeoParquet.
+
+    Results are cached per AOI+type+release under the geoscena cache so re-baking a place (or the
+    whole 40-place set) does not re-scan S3. Delete the cache dir to force a refresh.
+    """
     w, s, e, n = aoi.bbox
-    tmp = Path(tempfile.gettempdir()) / f"geoscena_ov_{otype}_{abs(hash((w, s, e, n)))}.parquet"
-    if tmp.exists():
-        tmp.unlink()
+    cache = aoi_key(aoi, f"overture_{otype}_{release.replace('.', '_')}", "parquet")
+    if cache.exists() and cache.stat().st_size > 0:
+        gdf = gpd.read_parquet(cache)
+        return gdf.to_crs("EPSG:4326") if gdf.crs else gdf.set_crs("EPSG:4326")
+
     cmd = [
         sys.executable,
         "-m",
@@ -43,20 +49,16 @@ def _download(aoi: AOI, otype: str, release: str) -> gpd.GeoDataFrame:
         "geoparquet",
         f"--type={otype}",
         "-o",
-        str(tmp),
+        str(cache),
     ]
     env = {"OVERTURE_RELEASE": release}
     proc = subprocess.run(cmd, capture_output=True, text=True, env={**_os_environ(), **env})
-    if proc.returncode != 0 or not tmp.exists():
+    if proc.returncode != 0 or not cache.exists():
         raise RuntimeError(
             f"overturemaps download ({otype}) failed: {proc.stderr.strip()[:400]}"
         )
-    gdf = gpd.read_parquet(tmp)
-    try:
-        tmp.unlink()
-        Path(str(tmp) + ".state").unlink(missing_ok=True)
-    except OSError:
-        pass
+    Path(str(cache) + ".state").unlink(missing_ok=True)
+    gdf = gpd.read_parquet(cache)
     if gdf.crs is None:
         gdf.set_crs("EPSG:4326", inplace=True)
     else:

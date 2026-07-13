@@ -15,4 +15,4 @@ from geoscena.provenance import LICENSES, LayerProvenance
 
 __all__ = ["AOI", "SceneBundle", "LayerProvenance", "LICENSES", "__version__"]
 
-__version__ = "0.01.000"
+__version__ = "0.01.001"
