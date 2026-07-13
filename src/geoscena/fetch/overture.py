@@ -85,11 +85,22 @@ def _os_environ() -> dict:
 def fetch_buildings(aoi: AOI, fetched: str, release: str = DEFAULT_RELEASE) -> gpd.GeoDataFrame:
     """Fetch Overture building footprints intersecting the AOI (WGS84).
 
-    Keeps geometry + ``height`` / ``num_floors`` (the ladder's top rungs) and a provenance on
-    ``.attrs``.
+    Keeps geometry + a rich attribute set (``height``, ``num_floors``, ``min_height``, ``class``,
+    ``subtype``, ``roof_shape``, ``roof_material``, ``facade_material``) so the product can filter and
+    colour by any of them. A provenance is stored on ``.attrs``.
     """
     gdf = _download(aoi, "building", release)
-    keep = [c for c in ("height", "num_floors", "geometry") if c in gdf.columns]
+    attrs = [
+        "height",
+        "num_floors",
+        "min_height",
+        "class",
+        "subtype",
+        "roof_shape",
+        "roof_material",
+        "facade_material",
+    ]
+    keep = [c for c in (*attrs, "geometry") if c in gdf.columns]
     gdf = gdf[keep].copy()
     gdf = gdf[gdf.geometry.notna() & gdf.geometry.intersects(aoi_polygon(aoi))].reset_index(drop=True)
     gdf.attrs["provenance"] = LayerProvenance(

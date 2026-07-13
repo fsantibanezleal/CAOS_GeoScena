@@ -29,6 +29,10 @@ def _height_color(h: float, hmax: float) -> tuple[int, int, int]:
     return (r, g, b)
 
 
+def _str_or_none(v) -> str | None:
+    return None if v is None else str(v)
+
+
 def _polys(geom) -> list[Polygon]:
     if isinstance(geom, Polygon):
         return [geom]
@@ -57,6 +61,24 @@ def extrude_buildings(
     tr = aoi.transformer_to_local()
     hmax = float(np.nanpercentile(heights, 95)) if len(heights) else 1.0
 
+    def col(name: str):
+        return buildings[name].to_numpy() if name in getattr(buildings, "columns", []) else None
+
+    c_floors = col("num_floors")
+    c_minh = col("min_height")
+    c_bclass = col("class")
+    c_subtype = col("subtype")
+    c_roof = col("roof_shape")
+
+    def _attr(arr, i):
+        if arr is None:
+            return None
+        v = arr[i]
+        try:
+            return None if v is None or (isinstance(v, float) and np.isnan(v)) else v
+        except (TypeError, ValueError):
+            return v
+
     all_v: list[np.ndarray] = []
     all_f: list[np.ndarray] = []
     all_c: list[np.ndarray] = []
@@ -69,6 +91,7 @@ def extrude_buildings(
         h = float(heights[i])
         z0 = float(base_elev[i]) if base_elev is not None else 0.0
         color = _height_color(h, hmax)
+        area_m2 = 0.0
         for poly in _polys(geom):
             if poly.is_empty or poly.exterior is None:
                 continue
@@ -77,6 +100,10 @@ def extrude_buildings(
                 continue
             x, y = tr.transform(ext[:, 0], ext[:, 1])
             ring = np.column_stack([x, y]).astype("float64")
+            # shoelace footprint area in local metres
+            area_m2 += abs(
+                float(np.dot(ring[:, 0], np.roll(ring[:, 1], -1)) - np.dot(ring[:, 1], np.roll(ring[:, 0], -1)))
+            ) / 2.0
             rings = np.array([ring.shape[0]], dtype="uint32")
             tri = triangulate_float64(ring, rings).reshape(-1, 3)
             if tri.shape[0] == 0:
@@ -102,12 +129,19 @@ def extrude_buildings(
             all_fid.append(np.full(verts.shape[0], i, dtype="int32"))
             voff += verts.shape[0]
 
+        floors = _attr(c_floors, i)
         features.append(
             {
                 "id": int(i),
                 "height_m": round(h, 2),
                 "height_source": str(height_source[i]),
-                "class": int(classes[i]) if classes is not None else None,
+                "class": int(classes[i]) if classes is not None else None,  # WorldCover land cover
+                "area_m2": round(area_m2, 1),
+                "num_floors": int(floors) if floors is not None else None,
+                "min_height_m": (round(float(_attr(c_minh, i)), 1) if _attr(c_minh, i) is not None else None),
+                "use": _str_or_none(_attr(c_bclass, i)),  # Overture building class (residential, commercial, ...)
+                "subtype": _str_or_none(_attr(c_subtype, i)),
+                "roof_shape": _str_or_none(_attr(c_roof, i)),
             }
         )
 
