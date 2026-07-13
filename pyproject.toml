@@ -1,0 +1,60 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "geoscena"
+version = "0.1.0"
+description = "AOI public-geodata acquisition + SceneBundle fusion and meshing core for 3D area reconstruction"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Felipe Santibanez-Leal", email = "fsantibanez@gmail.com" }]
+keywords = ["geospatial", "3d", "reconstruction", "overture", "dem", "gltf", "scene"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: Apache Software License",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Scientific/Engineering :: GIS",
+]
+dependencies = [
+  "numpy>=1.26",
+  "scipy>=1.11",
+  "shapely>=2.0",
+  "geopandas>=1.0",
+  "pyproj>=3.6",
+  "rasterio>=1.3",
+  "requests>=2.31",
+  "trimesh>=4.4",
+  "mapbox-earcut>=1.0",
+]
+
+[project.optional-dependencies]
+overture = ["overturemaps>=0.14"]
+osm = ["osmnx>=2.0"]
+lidar = ["pdal>=3.4", "laspy>=2.5"]
+dev = ["pytest>=8.0", "ruff>=0.6"]
+all = ["overturemaps>=0.14", "osmnx>=2.0", "pdal>=3.4", "laspy>=2.5"]
+
+[project.urls]
+Homepage = "https://github.com/fsantibanezleal/CAOS_GeoScena"
+Repository = "https://github.com/fsantibanezleal/CAOS_GeoScena"
+
+[project.scripts]
+geoscena = "geoscena.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+geoscena = ["py.typed"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["E501"]

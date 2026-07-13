@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+.venv-*/
+.pytest_cache/
+.ruff_cache/
+
+# geoscena raw-data cache (never commit heavy geodata)
+.geoscena-cache/
+*.tif
+*.laz
+*.las
+*.parquet
+
+# secrets (only CAOS_MANAGE holds these)
+.env
+
+# OS
+.DS_Store
+Thumbs.db
