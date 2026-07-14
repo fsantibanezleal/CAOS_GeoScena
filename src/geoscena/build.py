@@ -40,6 +40,7 @@ class BuildConfig:
     include_population: bool = True
     include_ground_truth: bool = True
     include_modalities: bool = True  # fused topic modalities (solar, soil, ...) as per-building attributes
+    include_environment: bool = True  # per-place solar-energy potential + climate normals (PVGIS + Open-Meteo)
     cache_dir: str | None = None  # local cache for download-based modalities (solar); COG modalities ignore it
     overture_release: str | None = None
     notes: list[str] = field(default_factory=list)
@@ -57,6 +58,22 @@ def build_scene(aoi: AOI, cfg: BuildConfig) -> SceneBundle:
         aoi, dem, max_error_m=cfg.terrain_max_error_m, max_vertices=cfg.terrain_max_vertices
     )
     bundle.add_mesh(terrain, dem.provenance)
+
+    # --- environment (per-place solar-energy potential + climate normals; near-constant across the AOI) ---
+    if cfg.include_environment:
+        try:
+            from geoscena.fetch.environment import ENV_META, fetch_environment
+
+            env = fetch_environment(aoi.lat0, aoi.lon0, fetched=cfg.fetched)
+            if env.values:
+                bundle.environment = {
+                    "values": env.values,
+                    "meta": {k: {"label": ENV_META[k][0], "unit": ENV_META[k][1]} for k in env.values if k in ENV_META},
+                    "sources": [p.as_dict() for p in env.provenance],
+                }
+                notes.append(f"environment: {', '.join(sorted(env.values))}")
+        except Exception as exc:  # noqa: BLE001 - an environment gap never sinks the build
+            notes.append(f"environment skipped: {type(exc).__name__}")
 
     # --- land cover (recolours terrain zones; sampled onto buildings) ---
     landcover = None

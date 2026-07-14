@@ -78,6 +78,10 @@ class SceneBundle:
     # Fused topic modalities (solar, soil, ...) sampled as per-building attributes rather than their own
     # layer; recorded here so the manifest still carries each one's source + license (honesty).
     modalities: list[dict] = field(default_factory=list)
+    # Per-place scalar environment (solar-energy potential + climate normals): near-constant across the AOI,
+    # so recorded once for the place (and, for multi-unit places, per admin unit in admin.json) rather than
+    # per building. {"values": {key: float}, "meta": {key: {label, unit}}, "sources": [prov dicts]}.
+    environment: dict = field(default_factory=dict)
 
     def add_mesh(self, layer: MeshLayer, prov: LayerProvenance) -> None:
         self.meshes[layer.name] = layer
@@ -122,6 +126,7 @@ class SceneBundle:
             "layers": layers,
             "stats": self.stats,
             "modalities": self.modalities,
+            "environment": self.environment,
             "any_noncommercial": self.any_noncommercial()
             or any(m.get("commercial_ok") is False for m in self.modalities),
             "credits": sorted(
