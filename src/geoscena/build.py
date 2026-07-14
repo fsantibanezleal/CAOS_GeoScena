@@ -127,6 +127,22 @@ def build_scene(aoi: AOI, cfg: BuildConfig) -> SceneBundle:
                                 )
                         except Exception as exc:  # noqa: BLE001 - a modality gap never sinks the build
                             notes.append(f"modality {spec.key} skipped: {type(exc).__name__}")
+
+                    # --- Sentinel-2 multispectral: real vegetation/water/built-up indices per building ---
+                    # (the inferred metrics you filter + aggregate by). One STAC scene -> NDVI/NDWI/NDBI.
+                    try:
+                        from geoscena.fetch.sentinel2 import INDEX_META, fetch_sentinel2
+
+                        s2 = fetch_sentinel2(aoi, fetched=cfg.fetched)
+                        for key, ig in s2.indices.items():
+                            vals = ig.sample(cent.x.to_numpy(), cent.y.to_numpy())
+                            if np.isfinite(vals).any():
+                                modalities[key] = vals
+                                label, unit = INDEX_META[key]
+                                bundle.add_modality(key, label, unit, s2.provenance)
+                                notes.append(f"s2 {key}: {int(np.isfinite(vals).sum())}/{len(vals)} sampled")
+                    except Exception as exc:  # noqa: BLE001 - a satellite gap never sinks the build
+                        notes.append(f"sentinel-2 skipped: {type(exc).__name__}")
                 mesh = extrude_buildings(
                     aoi, gdf, hres.heights, hres.source,
                     base_elev=base, classes=classes, modalities=modalities,
