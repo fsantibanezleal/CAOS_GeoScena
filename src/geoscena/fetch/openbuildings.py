@@ -114,25 +114,38 @@ def fetch_height_raster(aoi: AOI, fetched: str) -> HeightRaster | None:
     dst = np.zeros((rows, cols), dtype="float32")
     dst_transform = from_bounds(w, s, e, n, cols, rows)
     filled = False
-    for tile in tiles:
-        url = f"/vsicurl/{BUCKET}/{tile}"
-        try:
-            with rasterio.open(url) as srcds:
-                tmp = np.zeros((rows, cols), dtype="float32")
-                reproject(
-                    source=rasterio.band(srcds, HEIGHT_BAND),
-                    destination=tmp,
-                    src_transform=srcds.transform,
-                    src_crs=srcds.crs,
-                    dst_transform=dst_transform,
-                    dst_crs="EPSG:4326",
-                    resampling=Resampling.bilinear,
-                )
-                m = tmp > 0
-                dst[m] = tmp[m]
-                filled = filled or bool(m.any())
-        except rasterio.errors.RasterioIOError:
-            continue
+    # GDAL tuning for the /vsicurl reads (mirrors rastermod.py): without GDAL_DISABLE_READDIR_ON_OPEN,
+    # opening a COG on GCS triggers a bucket directory listing (thousands of range requests) that can turn
+    # a windowed read into a multi-minute stall. A real HTTP timeout + retries keep one slow tile from
+    # hanging the whole bake; the ladder height fallback covers a tile that genuinely fails.
+    env = rasterio.Env(
+        GDAL_HTTP_TIMEOUT="30",
+        GDAL_HTTP_MAX_RETRY="2",
+        GDAL_HTTP_RETRY_DELAY="2",
+        VSI_CACHE="TRUE",
+        GDAL_DISABLE_READDIR_ON_OPEN="EMPTY_DIR",
+        CPL_VSIL_CURL_ALLOWED_EXTENSIONS=".vrt,.tif,.tiff",
+    )
+    with env:
+        for tile in tiles:
+            url = f"/vsicurl/{BUCKET}/{tile}"
+            try:
+                with rasterio.open(url) as srcds:
+                    tmp = np.zeros((rows, cols), dtype="float32")
+                    reproject(
+                        source=rasterio.band(srcds, HEIGHT_BAND),
+                        destination=tmp,
+                        src_transform=srcds.transform,
+                        src_crs=srcds.crs,
+                        dst_transform=dst_transform,
+                        dst_crs="EPSG:4326",
+                        resampling=Resampling.bilinear,
+                    )
+                    m = tmp > 0
+                    dst[m] = tmp[m]
+                    filled = filled or bool(m.any())
+            except rasterio.errors.RasterioIOError:
+                continue
     if not filled:
         return None
 
