@@ -114,3 +114,15 @@ def test_terrain_tin_synthetic():
     assert mesh.vertices.shape[0] >= 9
     assert mesh.faces.shape[0] > 0
     assert mesh.faces.max() < mesh.vertices.shape[0]
+
+
+def test_census_specs_wellformed():
+    """INE Censo manzana modalities are registered with documented units + a valid license."""
+    from geoscena.fetch.census import CENSUS_SPECS, POP_DENSITY_SPEC
+
+    assert POP_DENSITY_SPEC.key == "pop_density" and POP_DENSITY_SPEC.unit == "people/km2"
+    keys = {s.key for s in CENSUS_SPECS}
+    assert keys == {"pop_density", "dwelling_density", "housing_precarity"}
+    for s in CENSUS_SPECS:
+        assert s.license in LICENSES
+        assert "arcgis" in s.url.lower()

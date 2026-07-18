@@ -160,6 +160,24 @@ def build_scene(aoi: AOI, cfg: BuildConfig) -> SceneBundle:
                                 notes.append(f"s2 {key}: {int(np.isfinite(vals).sum())}/{len(vals)} sampled")
                     except Exception as exc:  # noqa: BLE001 - a satellite gap never sinks the build
                         notes.append(f"sentinel-2 skipped: {type(exc).__name__}")
+
+                    # --- INE Censo 2017 manzana population DENSITY (Chile): the authoritative population
+                    # denominator, sampled per building centroid. Replaces the un-documented GHS-POP grid
+                    # for the absolute metric; skipped (recorded) outside Chile. ---
+                    try:
+                        from geoscena.fetch.census import fetch_census
+
+                        for cm in fetch_census(aoi, fetched=cfg.fetched):
+                            vals = cm.sample(cent.x.to_numpy(), cent.y.to_numpy())
+                            if np.isfinite(vals).any():
+                                modalities[cm.key] = vals
+                                bundle.add_modality(cm.spec.key, cm.spec.label, cm.spec.unit, cm.provenance)
+                                notes.append(
+                                    f"census {cm.key}: {int(np.isfinite(vals).sum())}/{len(vals)} sampled"
+                                    + (f", total_pop {cm.provenance.extra.get('total_pop')}" if cm.key == "pop_density" else "")
+                                )
+                    except Exception as exc:  # noqa: BLE001 - a census gap never sinks the build
+                        notes.append(f"census skipped: {type(exc).__name__}")
                 mesh = extrude_buildings(
                     aoi, gdf, hres.heights, hres.source,
                     base_elev=base, classes=classes, modalities=modalities,
