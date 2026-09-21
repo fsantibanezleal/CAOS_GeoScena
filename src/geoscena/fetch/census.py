@@ -31,7 +31,7 @@ import rasterio.features
 from rasterio.transform import from_bounds
 
 from geoscena.aoi import AOI
-from geoscena.fetch.rastermod import RasterModality, ModalitySpec
+from geoscena.fetch.rastermod import ModalitySpec, RasterModality
 from geoscena.provenance import LayerProvenance
 
 # INE Chile "Microdatos Censo 2017: Manzana" official ArcGIS Hub feature service (layer 0), owner gisine1.
@@ -159,7 +159,7 @@ def fetch_census(aoi: AOI, fetched: str, *, timeout: float = 60.0) -> list[Raste
     for spec in CENSUS_SPECS:
         col = gdf[spec.key]
         valid = gdf[np.isfinite(col)]
-        shapes = ((geom, float(v)) for geom, v in zip(valid.geometry, valid[spec.key]))
+        shapes = ((geom, float(v)) for geom, v in zip(valid.geometry, valid[spec.key], strict=True))
         grid = rasterio.features.rasterize(
             shapes, out_shape=(height, width), transform=transform, fill=np.nan, dtype="float32", all_touched=True
         )
