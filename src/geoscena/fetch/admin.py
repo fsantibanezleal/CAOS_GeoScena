@@ -56,7 +56,7 @@ def _to_world_rings(geom, aoi: AOI) -> list[list[tuple[float, float]]]:
             continue
         lon, lat = np.asarray(p.exterior.coords.xy[0]), np.asarray(p.exterior.coords.xy[1])
         east, north = aoi.to_local(lon, lat)
-        rings.append([(float(x), float(-z)) for x, z in zip(east, north)])
+        rings.append([(float(x), float(-z)) for x, z in zip(east, north, strict=True)])
     return rings
 
 
