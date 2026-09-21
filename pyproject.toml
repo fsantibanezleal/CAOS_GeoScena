@@ -36,7 +36,7 @@ dependencies = [
 overture = ["overturemaps>=0.14"]
 osm = ["osmnx>=2.0"]
 lidar = ["pdal>=3.4", "laspy>=2.5"]
-dev = ["pytest>=8.0", "ruff>=0.6"]
+dev = ["pytest>=8.0", "ruff==0.15.18"]
 all = ["overturemaps>=0.14", "osmnx>=2.0", "pdal>=3.4", "laspy>=2.5"]
 
 [project.urls]

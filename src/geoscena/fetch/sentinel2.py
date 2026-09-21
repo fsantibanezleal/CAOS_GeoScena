@@ -19,9 +19,9 @@ from dataclasses import dataclass
 
 import numpy as np
 import rasterio
+from rasterio.transform import from_bounds as transform_from_bounds
 from rasterio.warp import Resampling, reproject, transform_bounds
 from rasterio.windows import from_bounds
-from rasterio.transform import from_bounds as transform_from_bounds
 
 from geoscena.aoi import AOI
 from geoscena.provenance import LayerProvenance

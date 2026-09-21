@@ -52,11 +52,7 @@ def population_mesh(
     base = dem.sample(lons, lats) if dem is not None else np.zeros_like(ex)
     base = np.where(np.isfinite(base), base, float(np.nanmin(base)) if np.isfinite(base).any() else 0.0)
 
-    # cell half-size in local metres
-    dlon = (pop.east - pop.west) / cols
-    dlat = (pop.north - pop.south) / rows
-    hw = abs(aoi.to_local(np.array([pop.west + dlon]), np.array([lats[0]]))[0][0] - ex[0]) * 0.0
-    # simpler: derive half-size from ~100 m cells directly
+    # cell half-size in local metres, from the ~100 m population cells
     hx = 50.0
     hy = 50.0
 
