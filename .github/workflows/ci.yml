@@ -25,6 +25,8 @@ jobs:
         run: ruff check .
       - name: Test (offline unit tests)
         run: pytest tests/ -q
+      - name: No em-dash and no emoji in tracked content (ADR-0067)
+        run: python scripts/check_content_standards.py
       - name: Build check
         run: |
           pip install build twine
