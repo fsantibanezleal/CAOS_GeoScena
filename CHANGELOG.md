@@ -4,6 +4,12 @@ All notable changes to `geoscena` are documented here. Format: [Keep a Changelog
 versions use `X.XX.XXX` (display) / dropped-zero semver in the manifest. `0.x` while the SceneBundle
 contract is unstable.
 
+## [0.05.001] - 2026-09-26
+
+### Changed
+
+- No em-dash in the product's content (ADR-0067); the archetype's content guard runs in CI.
+
 ## [0.05.000] - 2026-09-26
 
 ### Fixed
