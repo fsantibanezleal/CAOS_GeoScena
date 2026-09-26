@@ -4,6 +4,13 @@ All notable changes to `geoscena` are documented here. Format: [Keep a Changelog
 versions use `X.XX.XXX` (display) / dropped-zero semver in the manifest. `0.x` while the SceneBundle
 contract is unstable.
 
+## [0.05.000] - 2026-09-26
+
+### Fixed
+
+- Every version source names the release the latest tag names (pyproject read 0.1.0 against VERSION 0.05.000; the tags after v0.01.000 were never cut); they had drifted apart across
+  the manifest, `pyproject.toml`, `VERSION` and the footer constant.
+
 ## [0.03.000] - 2026-07-13
 
 ### Added
